@@ -8,6 +8,10 @@ struct SkillsSettings: View {
     @State private var envEditor: EnvEditorState?
     @State private var filter: SkillsFilter = .all
     @State private var didScheduleInitialRefresh = false
+    @State private var selectedTab: SkillsTab = .installed
+    @State private var uploadTarget: UploadTarget?
+    @State private var isUploading = false
+    @State private var uploadError: String?
 
     init(state: AppState = AppStateStore.shared, model: SkillsSettingsModel = SkillsSettingsModel()) {
         self.state = state
@@ -19,12 +23,25 @@ struct SkillsSettings: View {
             VStack(alignment: .leading, spacing: 20) {
                 SettingsPageHeader(
                     title: "Skills",
-                    subtitle: "Optional capabilities that become available when their requirements are met.")
+                    subtitle: "已安装技能、公司技能市场（需 OA 登录）。")
 
-                self.skillsSummaryPanel
-                self.controlsCard
-                self.statusBanner
-                self.skillsList
+                Picker("", selection: self.$selectedTab) {
+                    Text("已安装").tag(SkillsTab.installed)
+                    Text("公司市场").tag(SkillsTab.companyMarket)
+                    Text("公共市场").tag(SkillsTab.publicMarket)
+                }
+                .pickerStyle(.segmented)
+
+                if self.selectedTab == .installed {
+                    self.skillsSummaryPanel
+                    self.controlsCard
+                    self.statusBanner
+                    self.skillsList
+                } else if self.selectedTab == .companyMarket {
+                    CompanySkillsSection()
+                } else {
+                    PublicSkillsSection()
+                }
                 Spacer(minLength: 8)
             }
             .settingsDetailContent()
@@ -45,6 +62,21 @@ struct SkillsSettings: View {
                         isPrimary: editor.isPrimary)
                 }
             }
+        }
+        .sheet(item: self.$uploadTarget) { target in
+            UploadSkillSheet(
+                name: target.name,
+                slug: target.slug,
+                description: target.description,
+                baseDir: target.baseDir,
+                isUploading: self.$isUploading,
+                error: self.$uploadError,
+                onCancel: { self.uploadTarget = nil },
+                onComplete: { _ in self.uploadTarget = nil })
+                .frame(minWidth: 480, minHeight: 460)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openclawSkillsNeedRefresh)) { _ in
+            Task { await self.model.refresh(force: true) }
         }
     }
 
@@ -141,38 +173,39 @@ struct SkillsSettings: View {
                     }
                 }
             }
+        } else if self.filteredSkills.isEmpty {
+            Text("No skills match this filter.")
+                .font(.callout).foregroundStyle(.secondary)
         } else {
-            SettingsCardGroup("Skills") {
-                LazyVStack(spacing: 0) {
-                    ForEach(Array(self.filteredSkills.enumerated()), id: \.element.id) { index, skill in
-                        SkillRow(
-                            skill: skill,
-                            isBusy: self.model.isBusy(skill: skill),
-                            connectionMode: self.state.connectionMode,
-                            showsDivider: index != self.filteredSkills.count - 1,
-                            onToggleEnabled: { enabled in
-                                Task { await self.model.setEnabled(skillKey: skill.skillKey, enabled: enabled) }
-                            },
-                            onInstall: { option, target in
-                                Task { await self.model.install(skill: skill, option: option, target: target) }
-                            },
-                            onSetEnv: { envKey, isPrimary in
-                                self.envEditor = EnvEditorState(
-                                    skillKey: skill.skillKey,
-                                    skillName: skill.name,
-                                    envKey: envKey,
-                                    isPrimary: isPrimary,
-                                    homepage: skill.homepage)
-                            })
-                    }
-                    if !self.model.skills.isEmpty, self.filteredSkills.isEmpty {
-                        SettingsCardRow(
-                            title: "No skills match this filter.",
-                            showsDivider: false)
-                        {
-                            EmptyView()
-                        }
-                    }
+            let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
+                ForEach(self.filteredSkills) { skill in
+                    SkillRow(
+                        skill: skill,
+                        isBusy: self.model.isBusy(skill: skill),
+                        connectionMode: self.state.connectionMode,
+                        showsDivider: false,
+                        onToggleEnabled: { enabled in
+                            Task { await self.model.setEnabled(skillKey: skill.skillKey, enabled: enabled) }
+                        },
+                        onInstall: { option, target in
+                            Task { await self.model.install(skill: skill, option: option, target: target) }
+                        },
+                        onSetEnv: { envKey, isPrimary in
+                            self.envEditor = EnvEditorState(
+                                skillKey: skill.skillKey,
+                                skillName: skill.name,
+                                envKey: envKey,
+                                isPrimary: isPrimary,
+                                homepage: skill.homepage)
+                        },
+                        onUpload: {
+                            self.uploadTarget = UploadTarget(
+                                name: skill.name,
+                                slug: skill.skillKey,
+                                description: skill.description,
+                                baseDir: skill.baseDir)
+                        })
                 }
             }
         }
@@ -204,6 +237,20 @@ struct SkillsSettings: View {
             }
         }
     }
+}
+
+private enum SkillsTab: Hashable {
+    case installed
+    case companyMarket
+    case publicMarket
+}
+
+private struct UploadTarget: Identifiable {
+    let name: String
+    let slug: String
+    let description: String
+    let baseDir: String
+    var id: String { self.slug }
 }
 
 private enum SkillsFilter: String, CaseIterable, Identifiable {
@@ -243,6 +290,7 @@ private struct SkillRow: View {
     let onToggleEnabled: (Bool) -> Void
     let onInstall: (SkillInstallOption, InstallTarget) -> Void
     let onSetEnv: (String, Bool) -> Void
+    let onUpload: () -> Void
     @State private var isExpanded = false
 
     private var missingBins: [String] {
@@ -258,74 +306,75 @@ private struct SkillRow: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(alignment: .top, spacing: 12) {
+        // Vertical card layout for the grid (matches public/company skill cards).
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 10) {
                 Text(self.skill.emoji ?? "✨")
                     .font(.title3)
-                    .frame(width: 28)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
                         Text(self.skill.name)
-                            .font(.headline)
+                            .font(.callout.weight(.semibold))
                             .lineLimit(1)
-                        SkillTag(text: self.statusLabel, color: self.statusColor)
-                        SkillTag(text: self.sourceLabel)
                         if let url = self.homepageUrl {
                             Link(destination: url) {
-                                Label("Website", systemImage: "link")
-                                    .labelStyle(.iconOnly)
+                                Image(systemName: "link")
                                     .font(.caption)
                             }
                             .buttonStyle(.link)
                         }
-                        Spacer(minLength: 0)
                     }
-
-                    Text(self.skill.description)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(self.isExpanded ? 5 : 2)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    if self.shouldShowMissingSummary {
-                        self.compactMissingSummary
-                    }
-
-                    if self.hasDetails {
-                        DisclosureGroup(isExpanded: self.$isExpanded) {
-                            VStack(alignment: .leading, spacing: 8) {
-                                if self.shouldShowMissingSummary {
-                                    self.missingSummary
-                                }
-                                if !self.skill.configChecks.isEmpty {
-                                    self.configChecksView
-                                }
-                                if !self.missingEnv.isEmpty {
-                                    self.envActionRow
-                                }
-                            }
-                            .padding(.top, 6)
-                        } label: {
-                            Text("Details")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                        }
+                    HStack(spacing: 6) {
+                        SkillTag(text: self.statusLabel, color: self.statusColor)
+                        SkillTag(text: self.sourceLabel)
                     }
                 }
 
                 Spacer(minLength: 0)
+            }
 
+            Text(self.skill.description)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(self.isExpanded ? 6 : 3)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if self.shouldShowMissingSummary {
+                self.compactMissingSummary
+            }
+
+            if self.hasDetails {
+                DisclosureGroup(isExpanded: self.$isExpanded) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        if self.shouldShowMissingSummary {
+                            self.missingSummary
+                        }
+                        if !self.skill.configChecks.isEmpty {
+                            self.configChecksView
+                        }
+                        if !self.missingEnv.isEmpty {
+                            self.envActionRow
+                        }
+                    }
+                    .padding(.top, 4)
+                } label: {
+                    Text("Details")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            HStack {
+                Spacer(minLength: 0)
                 self.trailingActions
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-
-            if self.showsDivider {
-                Divider()
-                    .padding(.leading, 54)
-                    .padding(.trailing, 14)
-            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quaternary.opacity(0.38), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(.white.opacity(0.055))
         }
     }
 
@@ -464,6 +513,12 @@ private struct SkillRow: View {
 
     private var trailingActions: some View {
         VStack(alignment: .trailing, spacing: 8) {
+            if !self.skill.baseDir.isEmpty {
+                Button("上传到公司市场") { self.onUpload() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .help("将此技能发布到公司技能市场")
+            }
             if !self.installOptions.isEmpty {
                 ForEach(self.installOptions, id: \.id) { (option: SkillInstallOption) in
                     HStack(spacing: 6) {
@@ -777,7 +832,8 @@ extension SkillsSettings {
             showsDivider: false,
             onToggleEnabled: { _ in },
             onInstall: { _, _ in },
-            onSetEnv: { _, _ in })
+            onSetEnv: { _, _ in },
+            onUpload: {})
         _ = row.body
 
         _ = SkillTag(text: "Bundled").body

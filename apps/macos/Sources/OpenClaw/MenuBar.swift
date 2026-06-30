@@ -334,7 +334,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func application(_: NSApplication, open urls: [URL]) {
         Task { @MainActor in
             for url in urls {
-                await DeepLinkHandler.shared.handle(url: url)
+                // tclaw:// is the corporate OA OAuth callback; route to OAAuthCoordinator
+                // instead of the openclaw:// deep-link pipeline.
+                if url.scheme?.lowercased() == "tclaw" {
+                    _ = await OAAuthCoordinator.shared.handle(callback: url)
+                } else {
+                    await DeepLinkHandler.shared.handle(url: url)
+                }
             }
         }
     }
@@ -361,7 +367,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { await HealthStore.shared.refresh(onDemand: true) }
         Task { await PortGuardian.shared.sweep(mode: AppStateStore.shared.connectionMode) }
         Task { await PeekabooBridgeHostCoordinator.shared.setEnabled(AppStateStore.shared.peekabooBridgeEnabled) }
+        Task { await OAAuthCoordinator.shared.restoreSession() }
         self.scheduleFirstRunOnboardingIfNeeded()
+
+        // 启动默认行为：onboarding 已完成时，自动打开设置窗口到「聊天」页。首跑会走 onboarding，
+        // 不冲突。复用 onboarding 的 asyncAfter(0.6)，等菜单栏标签渲染完、SettingsWindowOpener 注册好。
+        let seenVersion = UserDefaults.standard.integer(forKey: onboardingVersionKey)
+        let onboardingWillShow = AppStateStore.shared.connectionMode == .unconfigured
+            && (seenVersion < currentOnboardingVersion || !AppStateStore.shared.onboardingSeen)
+        if !onboardingWillShow {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                AppNavigationActions.openSettings(tab: .chat)
+            }
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             CLIInstallPrompter.shared.checkAndPromptIfNeeded(reason: "launch")
         }

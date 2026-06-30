@@ -116,7 +116,10 @@ struct OnboardingView: View {
         case .unconfigured:
             showOnboardingChat ? [0, 1, 8, 9] : [0, 1, 9]
         case .local:
-            showOnboardingChat ? [0, 1, 3, 5, 8, 9] : [0, 1, 3, 5, 9]
+            // 6 = cliPage (install CLI) MUST precede 3 (wizard): the wizard starts the gateway and
+            // waits for it to be ready, so the CLI has to be installed first — otherwise wizard
+            // errors "Gateway did not become ready".
+            showOnboardingChat ? [0, 1, 6, 3, 5, 8, 9] : [0, 1, 6, 3, 5, 9]
         }
     }
 

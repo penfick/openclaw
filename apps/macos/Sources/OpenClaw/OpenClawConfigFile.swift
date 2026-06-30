@@ -201,6 +201,46 @@ enum OpenClawConfigFile {
         self.saveDict(root)
     }
 
+    /// Apply an RFC 7396 JSON Merge Patch to the config file (direct read-modify-write).
+    ///
+    /// This is the enterprise replacement for the `config.patch` RPC: object values merge
+    /// recursively, `NSNull` deletes a key, scalars/arrays replace. Semantics are identical
+    /// to config.patch, so callers keep building the same patch dicts. Returns instantly —
+    /// the gateway chokidar-watches this file and async-reloads ~1s later (vs config.patch's
+    /// synchronous ~4.5s reload that blocked the UI). The whole read-modify-write runs under
+    /// the file lock for app-thread safety; gateway-write races are handled by its
+    /// `awaitWriteFinish` debounce + our atomic write.
+    @discardableResult
+    static func applyMergePatch(_ patch: [String: Any]) -> Bool {
+        self.withFileLock {
+            var root = self.loadDict()
+            Self.applyRFC7396(into: &root, patch: patch)
+            return self.saveDict(root)
+        }
+    }
+
+    /// RFC 7396 merge-patch application: dicts merge recursively, NSNull deletes, else replace.
+    /// When the patch value is a dict but the target key is absent/non-dict, the result is the
+    /// patch object with its own null members removed (per spec).
+    private static func applyRFC7396(into target: inout [String: Any], patch: [String: Any]) {
+        for (key, value) in patch {
+            if value is NSNull {
+                target.removeValue(forKey: key)
+            } else if let nested = value as? [String: Any] {
+                if var existing = target[key] as? [String: Any] {
+                    Self.applyRFC7396(into: &existing, patch: nested)
+                    target[key] = existing
+                } else {
+                    var cleaned: [String: Any] = [:]
+                    Self.applyRFC7396(into: &cleaned, patch: nested)
+                    target[key] = cleaned
+                }
+            } else {
+                target[key] = value
+            }
+        }
+    }
+
     static func browserControlEnabled(defaultValue: Bool = true) -> Bool {
         let root = self.loadDict()
         let browser = root["browser"] as? [String: Any]

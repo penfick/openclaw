@@ -18,10 +18,14 @@ extension View {
 }
 
 struct SettingsPageHeader: View {
-    let title: String
-    let subtitle: String?
+    let title: LocalizedStringKey
+    let subtitle: LocalizedStringKey?
 
-    init(title: String, subtitle: String? = nil) {
+    // title/subtitle are LocalizedStringKey so a caller like
+    // SettingsPageHeader(title: "General") resolves the English literal through
+    // Localizable.strings when the Mac language is zh-Hans (falls back to the
+    // literal itself otherwise). All call sites pass string literals.
+    init(title: LocalizedStringKey, subtitle: LocalizedStringKey? = nil) {
         self.title = title
         self.subtitle = subtitle
     }
@@ -30,7 +34,7 @@ struct SettingsPageHeader: View {
         VStack(alignment: .leading, spacing: 5) {
             Text(self.title)
                 .font(.title3.weight(.semibold))
-            if let subtitle, !subtitle.isEmpty {
+            if let subtitle {
                 Text(subtitle)
                     .font(.callout)
                     .foregroundStyle(.secondary)

@@ -1,0 +1,37 @@
+/* zh-Hans localization for the OpenClaw macOS app (二开).
+   Keys are the English source strings; SwiftUI Text/Label/LocalizedStringKey
+   look them up here when the Mac's primary language is 简体中文.
+   String not present here falls back to the key itself (the English literal),
+   so adding new translations later is purely additive. */
+
+/* ---- Sidebar group titles ---- */
+"Basics" = "基础";
+"Automation" = "自动化";
+"Data" = "数据";
+"Advanced" = "高级";
+"Developer" = "开发者";
+
+/* ---- Sidebar tab titles (also reused as page H1 titles) ---- */
+"Chat" = "聊天";
+"General" = "通用";
+"Connection" = "连接";
+"Permissions" = "权限";
+"Voice & Talk" = "语音与通话";
+"Channels" = "渠道";
+"Skills" = "技能";
+"Cron Jobs" = "定时任务";
+"Exec Approvals" = "命令审批";
+"Sessions" = "会话";
+"Instances" = "实例";
+"Config" = "配置";
+"Models" = "模型";
+"Debug" = "调试";
+"Account" = "账号";
+"About" = "关于";
+
+/* ---- English page-header subtitles (pages still in English) ---- */
+"Everyday OpenClaw app behavior." = "OpenClaw 应用的日常行为设置。";
+"Choose where the Gateway runs and how this Mac app reaches it." = "选择网关运行位置，以及本 Mac 应用如何连接到它。";
+"macOS access for notifications, capture, voice, and device context." = "通知、屏幕捕获、语音与设备上下文的 macOS 访问权限。";
+"Wake phrases, push-to-talk, microphone input, and Talk Mode feedback." = "唤醒短语、按键说话、麦克风输入与对话模式反馈。";
+"Control how agent shell commands are approved on this Mac." = "控制智能体在本 Mac 上执行 shell 命令的审批方式。";

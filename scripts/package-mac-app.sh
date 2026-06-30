@@ -283,6 +283,14 @@ echo "📦 Copying device model resources"
 rm -rf "$APP_ROOT/Contents/Resources/DeviceModels"
 cp -R "$ROOT_DIR/apps/macos/Sources/OpenClaw/Resources/DeviceModels" "$APP_ROOT/Contents/Resources/DeviceModels"
 
+echo "🌐 Copying localizations"
+for lproj in "$ROOT_DIR/apps/macos/Sources/OpenClaw/Resources/"*.lproj; do
+  [ -d "$lproj" ] || continue
+  name=$(basename "$lproj")
+  rm -rf "$APP_ROOT/Contents/Resources/$name"
+  cp -R "$lproj" "$APP_ROOT/Contents/Resources/$name"
+done
+
 echo "📦 Copying Control UI assets"
 CONTROL_UI_SRC="$ROOT_DIR/dist/control-ui"
 CONTROL_UI_DEST="$APP_ROOT/Contents/Resources/control-ui"

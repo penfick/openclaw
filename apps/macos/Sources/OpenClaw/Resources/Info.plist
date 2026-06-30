@@ -4,6 +4,11 @@
 <dict>
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>en</string>
+        <string>zh-Hans</string>
+    </array>
     <key>CFBundleExecutable</key>
     <string>OpenClaw</string>
     <key>CFBundleIdentifier</key>
@@ -28,6 +33,14 @@
             <key>CFBundleURLSchemes</key>
             <array>
                 <string>openclaw</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>ai.openclaw.mac.oa</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>tclaw</string>
             </array>
         </dict>
     </array>
@@ -68,9 +81,18 @@
     <dict>
         <key>NSAllowsArbitraryLoadsInWebContent</key>
         <true/>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
         <key>NSExceptionDomains</key>
         <dict>
             <key>100.100.100.100</key>
+            <dict>
+                <key>NSExceptionAllowsInsecureHTTPLoads</key>
+                <true/>
+                <key>NSIncludesSubdomains</key>
+                <true/>
+            </dict>
+            <key>172.20.200.61</key>
             <dict>
                 <key>NSExceptionAllowsInsecureHTTPLoads</key>
                 <true/>

@@ -59,6 +59,12 @@ let package = Package(
             ],
             exclude: [
                 "Resources/Info.plist",
+                // Localization catalogs are copied to Contents/Resources/*.lproj by
+                // scripts/package-mac-app.sh (mirrors how Info.plist is handled), so
+                // Bundle.main — what Text/LocalizedStringKey resolves against — finds
+                // them. SwiftPM resource processing would land them in the unused
+                // OpenClaw_OpenClaw.bundle instead.
+                "Resources/zh-Hans.lproj",
             ],
             resources: [
                 .copy("Resources/OpenClaw.icns"),

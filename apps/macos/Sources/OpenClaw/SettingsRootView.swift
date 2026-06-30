@@ -27,9 +27,24 @@ struct SettingsRootView: View {
             List(selection: self.sidebarSelection) {
                 ForEach(self.visibleGroups) { group in
                     Section(group.title) {
-                        ForEach(group.tabs) { tab in
-                            Label(tab.title, systemImage: tab.systemImage)
-                                .tag(tab as SettingsTab?)
+                        ForEach(group.parts) { part in
+                            switch part {
+                            case .run(let tabs):
+                                ForEach(tabs, id: \.self) { tab in
+                                    Label(tab.title, systemImage: tab.systemImage)
+                                        .tag(tab as SettingsTab?)
+                                }
+                            case .titledRun(_, let title, let systemImage, let tabs):
+                                Label(title, systemImage: systemImage)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                    .padding(.top, 4)
+                                ForEach(tabs, id: \.self) { tab in
+                                    Label(tab.title, systemImage: tab.systemImage)
+                                        .tag(tab as SettingsTab?)
+                                        .padding(.leading, 16)
+                                }
+                            }
                         }
                     }
                 }
@@ -165,7 +180,17 @@ struct SettingsRootView: View {
     }
 
     private func detailView(for tab: SettingsTab) -> AnyView {
+        // 登录拦截：未登录 OA 时，除 Account（登录页）外所有菜单都拦截，强制先登录。
+        if !OAAuthCoordinator.shared.authenticated, tab != .account {
+            return AnyView(self.loginGateView)
+        }
+        return self.detailContent(for: tab)
+    }
+
+    private func detailContent(for tab: SettingsTab) -> AnyView {
         switch tab {
+        case .chat:
+            AnyView(ChatSettingsView())
         case .general:
             AnyView(GeneralSettings(state: self.state, page: .general, isActive: self.selectedTab == tab))
         case .connection:
@@ -191,11 +216,37 @@ struct SettingsRootView: View {
             AnyView(InstancesSettings(isActive: self.selectedTab == tab))
         case .config:
             AnyView(ConfigSettings())
+        case .models:
+            AnyView(ModelsSettings(state: self.state))
+        case .mcp:
+            AnyView(McpSettings(state: self.state))
         case .debug:
             AnyView(DebugSettings(state: self.state))
+        case .account:
+            AnyView(AccountSettings())
+        case .tianyinAssistant:
+            AnyView(TianyinAssistantView())
+        case .tianyinSettings:
+            AnyView(TianyinSettingsView())
         case .about:
             AnyView(AboutSettings(updater: self.updater))
         }
+    }
+
+    /// 未登录 OA 时的拦截页：所有功能菜单强制先登录。
+    private var loginGateView: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "lock.fill")
+                .font(.system(size: 40))
+                .foregroundStyle(.secondary)
+            Text("请先登录 OA 账号").font(.title3.weight(.semibold))
+            Text("所有功能需要 OA 身份验证，登录后即可使用。")
+                .font(.callout).foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            Button("去登录") { self.selectedTab = .account }
+                .buttonStyle(.borderedProminent)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func validTab(for requested: SettingsTab) -> SettingsTab {
@@ -229,25 +280,59 @@ struct SettingsRootView: View {
     }
 }
 
-private struct SettingsTabGroup: Identifiable {
-    let title: String
-    let tabs: [SettingsTab]
+/// A piece of a sidebar group's content. Selectable rows MUST be rendered via an inner
+/// `ForEach` whose closure holds the `Label().tag()` directly — a tagged Label sitting inside a
+/// `switch` branch (or as a DisclosureGroup sibling) is NOT selectable in `List(selection:)`.
+/// So each selectable run is its own `ForEach`, and titled children get a header Label followed
+/// by their own `ForEach`.
+private enum SidebarPart: Identifiable {
+    case run([SettingsTab])
+    case titledRun(id: String, title: LocalizedStringKey, systemImage: String, tabs: [SettingsTab])
 
     var id: String {
-        self.title
+        switch self {
+        case .run(let tabs): "run.\(tabs.map { String(describing: $0) }.joined(separator: ","))"
+        case .titledRun(let id, _, _, _): "titled.\(id)"
+        }
+    }
+}
+
+private struct SettingsTabGroup: Identifiable {
+    let id: String
+    let title: LocalizedStringKey
+    let parts: [SidebarPart]
+
+    // title is a LocalizedStringKey so the sidebar group label resolves through
+    // Localizable.strings; `id` is a separate stable string (LocalizedStringKey
+    // has no usable identity for Identifiable dedup).
+    /// All selectable tabs under this group — for detail-view caching.
+    var tabs: [SettingsTab] {
+        self.parts.flatMap { part -> [SettingsTab] in
+            switch part {
+            case .run(let tabs): tabs
+            case .titledRun(_, _, _, let tabs): tabs
+            }
+        }
     }
 
     static func defaultGroups(showDebug: Bool) -> [SettingsTabGroup] {
         var groups = [
-            SettingsTabGroup(title: "Basics", tabs: [.general, .connection, .permissions, .voiceWake]),
-            SettingsTabGroup(title: "Automation", tabs: [.channels, .skills, .cron, .execApprovals]),
-            SettingsTabGroup(title: "Data", tabs: [.sessions, .instances]),
-            SettingsTabGroup(title: "Advanced", tabs: [.config]),
-            SettingsTabGroup(title: "OpenClaw", tabs: [.about]),
+            SettingsTabGroup(id: "basics", title: "Basics", parts: [
+                .run([.chat]),
+                .titledRun(id: "tianyin", title: "天音", systemImage: "bubble.left.and.bubble.right",
+                           tabs: [.tianyinAssistant, .tianyinSettings]),
+                .run([.general, .connection, .permissions, .voiceWake]),
+            ]),
+            SettingsTabGroup(id: "automation", title: "Automation", parts: [
+                .run([.channels, .skills, .cron, .execApprovals, .models]),
+            ]),
+            SettingsTabGroup(id: "data", title: "Data", parts: [.run([.sessions, .instances])]),
+            SettingsTabGroup(id: "advanced", title: "Advanced", parts: [.run([.config, .mcp])]),
+            SettingsTabGroup(id: "openclaw", title: "OpenClaw", parts: [.run([.account, .about])]),
         ]
 
         if showDebug {
-            groups.insert(SettingsTabGroup(title: "Developer", tabs: [.debug]), at: groups.count - 1)
+            groups.insert(SettingsTabGroup(id: "developer", title: "Developer", parts: [.run([.debug])]), at: groups.count - 1)
         }
 
         return groups
@@ -255,8 +340,8 @@ private struct SettingsTabGroup: Identifiable {
 }
 
 enum SettingsTab: CaseIterable, Identifiable, Hashable {
-    case general, connection, permissions, voiceWake, channels, skills, cron
-    case execApprovals, sessions, instances, config, debug, about
+    case chat, general, connection, permissions, voiceWake, channels, skills, cron
+    case execApprovals, sessions, instances, config, mcp, models, debug, account, tianyinAssistant, tianyinSettings, about
     static let windowWidth: CGFloat = 1120
     static let windowHeight: CGFloat = 790
 
@@ -264,8 +349,9 @@ enum SettingsTab: CaseIterable, Identifiable, Hashable {
         self
     }
 
-    var title: String {
+    var title: LocalizedStringKey {
         switch self {
+        case .chat: "Chat"
         case .general: "General"
         case .connection: "Connection"
         case .permissions: "Permissions"
@@ -277,13 +363,19 @@ enum SettingsTab: CaseIterable, Identifiable, Hashable {
         case .sessions: "Sessions"
         case .instances: "Instances"
         case .config: "Config"
+        case .models: "Models"
+        case .mcp: "MCP"
         case .debug: "Debug"
+        case .account: "Account"
+        case .tianyinAssistant: "天音助手"
+        case .tianyinSettings: "天音设置"
         case .about: "About"
         }
     }
 
     var systemImage: String {
         switch self {
+        case .chat: "bubble.left"
         case .general: "gearshape"
         case .connection: "point.3.connected.trianglepath.dotted"
         case .permissions: "lock.shield"
@@ -295,7 +387,12 @@ enum SettingsTab: CaseIterable, Identifiable, Hashable {
         case .sessions: "clock.arrow.circlepath"
         case .instances: "network"
         case .config: "slider.horizontal.3"
+        case .models: "cpu"
+        case .mcp: "puzzlepiece.extension"
         case .debug: "ant"
+        case .account: "person.crop.circle"
+        case .tianyinAssistant: "sparkles"
+        case .tianyinSettings: "gearshape"
         case .about: "info.circle"
         }
     }
@@ -324,7 +421,7 @@ struct SettingsRootView_Previews: PreviewProvider {
     static var previews: some View {
         ForEach(SettingsTab.allCases, id: \.self) { tab in
             SettingsRootView(state: .preview, updater: DisabledUpdaterController(), initialTab: tab)
-                .previewDisplayName(tab.title)
+                .previewDisplayName(String(describing: tab))
                 .frame(width: SettingsTab.windowWidth, height: SettingsTab.windowHeight)
         }
     }
