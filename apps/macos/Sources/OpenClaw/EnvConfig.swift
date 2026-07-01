@@ -18,7 +18,7 @@ enum EnvConfig {
     /// Company Skills Hub base URL.
     static var companySkillsHubUrl: String {
         isTestEnvironment
-            ? "http://172.21.8.111:3000"
+            ? "http://192.168.100.203:3001"
             : "https://skills.yourcompany.com"         // TODO: 正式公司技能市场地址
     }
 }
