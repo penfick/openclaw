@@ -137,6 +137,57 @@ struct MacGatewayChatTransport: OpenClawChatTransport {
             timeoutMs: 10000)
     }
 
+    func createSession(
+        key: String,
+        label: String?,
+        parentSessionKey: String?) async throws -> OpenClawChatCreateSessionResponse
+    {
+        var params: [String: AnyCodable] = [:]
+        let trimmedKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedKey.isEmpty {
+            params["key"] = AnyCodable(trimmedKey)
+        }
+        if let label {
+            let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                params["label"] = AnyCodable(trimmed)
+            }
+        }
+        if let parentSessionKey {
+            let trimmed = parentSessionKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                params["parentSessionKey"] = AnyCodable(trimmed)
+            }
+        }
+        let data = try await GatewayConnection.shared.request(
+            method: "sessions.create",
+            params: params,
+            timeoutMs: 20000)
+        return try JSONDecoder().decode(OpenClawChatCreateSessionResponse.self, from: data)
+    }
+
+    func setSessionLabel(sessionKey: String, label: String?) async throws {
+        var params: [String: AnyCodable] = [
+            "key": AnyCodable(sessionKey),
+        ]
+        // NSNull clears the label on the gateway (RFC-style patch).
+        params["label"] = label.map(AnyCodable.init) ?? AnyCodable(NSNull())
+        _ = try await GatewayConnection.shared.request(
+            method: "sessions.patch",
+            params: params,
+            timeoutMs: 15000)
+    }
+
+    func deleteSession(sessionKey: String, deleteTranscript: Bool) async throws {
+        _ = try await GatewayConnection.shared.request(
+            method: "sessions.delete",
+            params: [
+                "key": AnyCodable(sessionKey),
+                "deleteTranscript": AnyCodable(deleteTranscript),
+            ],
+            timeoutMs: 20000)
+    }
+
     func setActiveSessionKey(_ sessionKey: String) async throws {
         await MainActor.run {
             WebChatManager.shared.recordActiveSessionKey(sessionKey)
@@ -380,7 +431,7 @@ final class WebChatSwiftUIWindowController {
                 styleMask: [.titled, .closable, .resizable, .miniaturizable],
                 backing: .buffered,
                 defer: false)
-            window.title = "OpenClaw Chat"
+            window.title = "TClaw Chat"
             window.contentViewController = contentViewController
             window.isReleasedWhenClosed = false
             window.titleVisibility = .visible

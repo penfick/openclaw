@@ -6,9 +6,13 @@ extension OnboardingView {
     func wizardPage() -> some View {
         self.onboardingPage {
             VStack(spacing: 16) {
-                Text("Setup Wizard")
+                Text(MinimalGatewayConfig.shouldRunInteractiveWizard()
+                    ? "Setup Wizard"
+                    : "Start local gateway")
                     .font(.largeTitle.weight(.semibold))
-                Text("Follow the guided setup from the Gateway. This keeps onboarding in sync with the CLI.")
+                Text(MinimalGatewayConfig.shouldRunInteractiveWizard()
+                    ? "Follow the guided setup from the Gateway. This keeps onboarding in sync with the CLI."
+                    : "Writing minimal gateway config, registering launchd, and waiting until the local gateway is healthy. Models, channels, and skills are configured later in Settings.")
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -72,7 +76,9 @@ private struct OnboardingWizardCardContent: View {
         case .starting:
             HStack(spacing: 8) {
                 ProgressView()
-                Text("Starting wizard…")
+                Text(MinimalGatewayConfig.shouldRunInteractiveWizard()
+                    ? "Starting wizard…"
+                    : "Starting local gateway…")
                     .foregroundStyle(.secondary)
             }
         case let .step(step):
@@ -84,11 +90,18 @@ private struct OnboardingWizardCardContent: View {
             }
             .id(step.id)
         case .complete:
-            Text("Wizard complete. Continue to the next step.")
+            Text(MinimalGatewayConfig.shouldRunInteractiveWizard()
+                ? "Wizard complete. Continue to the next step."
+                : "Local gateway is ready. Continue to the next step.")
                 .font(.headline)
         case .waiting:
-            Text("Waiting for wizard…")
-                .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                ProgressView()
+                Text(MinimalGatewayConfig.shouldRunInteractiveWizard()
+                    ? "Waiting for wizard…"
+                    : "Preparing gateway…")
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }

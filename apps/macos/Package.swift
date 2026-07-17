@@ -65,6 +65,8 @@ let package = Package(
                 // them. SwiftPM resource processing would land them in the unused
                 // OpenClaw_OpenClaw.bundle instead.
                 "Resources/zh-Hans.lproj",
+                // Source logo for regenerating OpenClaw.icns (not shipped in the app).
+                "Resources/Brand",
             ],
             resources: [
                 .copy("Resources/OpenClaw.icns"),

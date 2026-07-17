@@ -19,7 +19,13 @@ enum AppNavigationActions {
         }
     }
 
+    /// Opens the primary multi-session chat window (not the legacy floating panel).
     static func openChat() {
+        ChatWindowOpener.shared.open()
+    }
+
+    /// Legacy floating chat panel (menu-bar popover style). Kept for `--chat` / power users.
+    static func openChatPanel() {
         NSApp.activate(ignoringOtherApps: true)
         Task { @MainActor in
             let sessionKey = await WebChatManager.shared.preferredSessionKey()
@@ -40,6 +46,11 @@ enum AppNavigationActions {
     }
 
     static func openSettings(tab: SettingsTab = .general) {
+        // Chat is no longer a settings tab — route to the main chat window.
+        if tab == .chat {
+            openChat()
+            return
+        }
         SettingsTabRouter.request(tab)
         SettingsWindowOpener.shared.open()
         DispatchQueue.main.async {

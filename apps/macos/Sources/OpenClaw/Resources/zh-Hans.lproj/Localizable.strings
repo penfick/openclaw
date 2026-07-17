@@ -1,8 +1,20 @@
-/* zh-Hans localization for the OpenClaw macOS app (二开).
+/* zh-Hans localization for the TClaw (OpenClaw fork) macOS app.
    Keys are the English source strings; SwiftUI Text/Label/LocalizedStringKey
-   look them up here when the Mac's primary language is 简体中文.
+   look them up here when the Mac's primary language is 简体中文 (or OPENCLAW_LANGUAGE=zh-CN).
    String not present here falls back to the key itself (the English literal),
    so adding new translations later is purely additive. */
+
+/* ---- Brand ---- */
+"TClaw" = "TClaw";
+"About TClaw" = "关于 TClaw";
+"TClaw Settings" = "TClaw 设置";
+"TClaw Chat" = "TClaw 聊天";
+"TClaw Not Configured" = "TClaw 未配置";
+"Remote TClaw Active" = "远程 TClaw 已连接";
+"TClaw Active" = "TClaw 运行中";
+"Welcome to TClaw" = "欢迎使用 TClaw";
+"Menu bar companion for notifications, screenshots, and privileged agent actions." = "菜单栏助手：通知、截图与特权智能体操作。";
+"© 2026 TClaw — MIT License." = "© 2026 TClaw — MIT 许可证。";
 
 /* ---- Sidebar group titles ---- */
 "Basics" = "基础";
@@ -28,10 +40,107 @@
 "Debug" = "调试";
 "Account" = "账号";
 "About" = "关于";
+"天音" = "天音";
+"天音助手" = "天音助手";
+"天音设置" = "天音设置";
 
-/* ---- English page-header subtitles (pages still in English) ---- */
-"Everyday OpenClaw app behavior." = "OpenClaw 应用的日常行为设置。";
+/* ---- English page-header subtitles ---- */
+"Everyday OpenClaw app behavior." = "TClaw 应用的日常行为设置。";
 "Choose where the Gateway runs and how this Mac app reaches it." = "选择网关运行位置，以及本 Mac 应用如何连接到它。";
 "macOS access for notifications, capture, voice, and device context." = "通知、屏幕捕获、语音与设备上下文的 macOS 访问权限。";
 "Wake phrases, push-to-talk, microphone input, and Talk Mode feedback." = "唤醒短语、按键说话、麦克风输入与对话模式反馈。";
 "Control how agent shell commands are approved on this Mac." = "控制智能体在本 Mac 上执行 shell 命令的审批方式。";
+
+/* ---- Onboarding (setup wizard) ---- */
+"Security notice" = "安全提示";
+"TClaw is a personal AI assistant companion. This setup only gets a local gateway running — models, channels, and skills are configured later in Settings." = "TClaw 是个人 AI 助手客户端。本安装仅启动本地网关——模型、渠道与技能请在设置中稍后配置。";
+"The connected AI agent (e.g. Claude) can trigger powerful actions on your Mac, including running commands, reading/writing files, and capturing screenshots — depending on the permissions you grant.\n\nOnly enable TClaw if you understand the risks and trust the prompts and integrations you use." = "连接的 AI 智能体（例如 Claude）可在本 Mac 上执行高权限操作，包括运行命令、读写文件与截屏——取决于你授予的权限。\n\n仅在理解风险并信任所用提示与集成时启用 TClaw。";
+"Choose your Gateway" = "选择网关";
+"TClaw uses a single Gateway that stays running. Pick this Mac, connect to a discovered gateway nearby, or configure later." = "TClaw 使用一个常驻网关。可选择本机、连接附近发现的网关，或稍后配置。";
+"This Mac" = "本机";
+"Configure later" = "稍后配置";
+"Don’t start the Gateway yet." = "暂不启动网关。";
+"Gateway starts automatically on this Mac." = "网关将在本机自动启动。";
+"Advanced…" = "高级…";
+"Hide Advanced" = "隐藏高级";
+"Install runtime" = "安装运行时";
+"Installs the `openclaw` CLI so launchd can run the local gateway (no Homebrew)." = "安装 `openclaw` CLI，以便 launchd 运行本地网关（无需 Homebrew）。";
+"Install the CLI" = "安装 CLI";
+"Install CLI" = "安装 CLI";
+"Reinstall CLI" = "重新安装 CLI";
+"Copy install command" = "复制安装命令";
+"Copied" = "已复制";
+"Start local gateway" = "启动本地网关";
+"Writing minimal gateway config, registering launchd, and waiting until the local gateway is healthy. Models, channels, and skills are configured later in Settings." = "正在写入最小网关配置、注册 launchd，并等待本地网关健康。模型、渠道与技能请在设置中稍后配置。";
+"Setup Wizard" = "安装向导";
+"Starting local gateway…" = "正在启动本地网关…";
+"Starting wizard…" = "正在启动向导…";
+"Local gateway is ready. Continue to the next step." = "本地网关已就绪，请继续下一步。";
+"Wizard complete. Continue to the next step." = "向导完成，请继续下一步。";
+"Preparing gateway…" = "正在准备网关…";
+"Waiting for wizard…" = "正在等待向导…";
+"Grant permissions" = "授予权限";
+"These macOS permissions let TClaw automate apps and capture context on this Mac." = "这些 macOS 权限允许 TClaw 在本机自动化应用并采集上下文。";
+"Refresh" = "刷新";
+"All set" = "全部完成";
+"Next" = "下一步";
+"Finish" = "完成";
+"Back" = "返回";
+"Retry" = "重试";
+"Meet your agent" = "认识你的智能体";
+"Agent workspace" = "智能体工作区";
+"TClaw runs the agent from a dedicated workspace so it can load `AGENTS.md` and write files there without mixing into your other projects." = "TClaw 在专用工作区运行智能体，以便加载 `AGENTS.md` 并写入文件，而不混入其他项目。";
+"Create workspace" = "创建工作区";
+"Open folder" = "打开文件夹";
+"Save in config" = "保存到配置";
+"Nearby gateways" = "附近的网关";
+"Searching for nearby gateways…" = "正在搜索附近的网关…";
+
+/* ---- Chat / gateway connect ---- */
+"正在连接 OpenClaw 网关…" = "正在连接 OpenClaw 网关…";
+"连不上 OpenClaw 网关，请确认网关在运行后重试。" = "连不上 OpenClaw 网关，请确认网关在运行后重试。";
+"启动时网关可能需要几秒钟就绪。" = "启动时网关可能需要几秒钟就绪。";
+"重试" = "重试";
+
+/* ---- Multi-conversation rail / main chat window ---- */
+"Conversations" = "对话";
+"New conversation" = "新建对话";
+"New Chat" = "新对话";
+"Main conversation" = "主会话";
+"Main" = "主";
+"Search" = "搜索";
+"No conversations yet." = "暂无对话。";
+"No matches." = "无匹配结果。";
+"Rename…" = "重命名…";
+"Delete…" = "删除…";
+"Delete conversation?" = "删除此对话？";
+"This permanently removes the conversation and its transcript. This cannot be undone." = "将永久删除该对话及其记录，无法撤销。";
+"Cancel" = "取消";
+"Delete" = "删除";
+"Save" = "保存";
+"Name" = "名称";
+"Copy session key" = "复制会话 ID";
+"Hide conversation list" = "隐藏对话列表";
+"Show conversation list" = "显示对话列表";
+"Cannot delete the main session." = "不能删除主会话。";
+"Open Chat" = "打开对话";
+"Settings" = "设置";
+"打开设置登录" = "打开设置登录";
+"请先登录 OA 账号" = "请先登录 OA 账号";
+"登录后即可使用对话与其它企业功能。" = "登录后即可使用对话与其它企业功能。";
+"打开设置" = "打开设置";
+
+/* ---- Common settings chrome ---- */
+"Check for updates automatically" = "自动检查更新";
+"Check for Updates…" = "检查更新…";
+"Updates unavailable in this build." = "此构建不支持更新。";
+"Settings…" = "设置…";
+"Quit" = "退出";
+
+
+/* ---- 天音 in main chat ---- */
+"New 天音 conversation" = "新建天音对话";
+"新建天音对话" = "新建天音对话";
+"知识库" = "知识库";
+"与天音知识库对话" = "与天音知识库对话";
+"天音设置" = "天音设置";

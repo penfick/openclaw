@@ -64,13 +64,15 @@ final class OnboardingWizardModel {
     func startIfNeeded(mode: AppState.ConnectionMode, workspace: String? = nil) async {
         guard self.sessionId == nil, !self.isStarting else { return }
         guard mode == .local else { return }
+
+        // Default product path (aligned with Windows SkipWizard=true): write minimal
+        // gateway config, start launchd gateway, health-check — no interactive wizard.
+        // Force interactive with OPENCLAW_RUN_WIZARD=1 (debug / advanced).
         if self.shouldSkipWizard() {
-            self.sessionId = nil
-            self.currentStep = nil
-            self.status = "done"
-            self.errorMessage = nil
+            await self.runMinimalLocalSetup()
             return
         }
+
         self.isStarting = true
         self.errorMessage = nil
         self.lastStartMode = mode
@@ -78,6 +80,9 @@ final class OnboardingWizardModel {
         defer { self.isStarting = false }
 
         do {
+            // Even when running the interactive wizard, ensure base gateway keys exist.
+            _ = MinimalGatewayConfig.ensureLocalGatewayConfig(
+                port: GatewayEnvironment.gatewayPort())
             GatewayProcessManager.shared.setActive(true)
             if await GatewayProcessManager.shared.waitForGatewayReady(timeout: 12) == false {
                 throw NSError(
@@ -97,6 +102,46 @@ final class OnboardingWizardModel {
             self.status = "error"
             self.errorMessage = error.localizedDescription
             onboardingWizardLogger.error("start failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// Minimal install: config → start gateway → wait healthy. Marks status "done" on success.
+    private func runMinimalLocalSetup() async {
+        self.isStarting = true
+        self.errorMessage = nil
+        self.status = "running"
+        self.currentStep = nil
+        defer { self.isStarting = false }
+
+        do {
+            let port = GatewayEnvironment.gatewayPort()
+            let result = MinimalGatewayConfig.ensureLocalGatewayConfig(port: port)
+            onboardingWizardLogger.info(
+                "minimal setup wroteConfig=\(result.wroteConfig) tokenCreated=\(result.tokenCreated) port=\(result.port)")
+
+            GatewayProcessManager.shared.setActive(true)
+            await GatewayProcessManager.shared.ensureLaunchAgentEnabledIfNeeded()
+
+            // Windows health timeout is ~90s; allow cold node start on Mac similarly.
+            if await GatewayProcessManager.shared.waitForGatewayReady(timeout: 90) == false {
+                throw NSError(
+                    domain: "Gateway",
+                    code: 1,
+                    userInfo: [
+                        NSLocalizedDescriptionKey:
+                            "Gateway did not become ready on port \(port). Check Debug → Gateway logs.",
+                    ])
+            }
+
+            self.sessionId = nil
+            self.currentStep = nil
+            self.status = "done"
+            self.errorMessage = nil
+        } catch {
+            self.status = "error"
+            self.errorMessage = error.localizedDescription
+            onboardingWizardLogger.error(
+                "minimal setup failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -185,31 +230,11 @@ final class OnboardingWizardModel {
         return true
     }
 
+    /// Skip interactive wizard unless OPENCLAW_RUN_WIZARD is set.
+    /// (Previously only skipped when config already had auth — that still ran the
+    /// model/channel/skills wizard on first install, which product no longer wants.)
     private func shouldSkipWizard() -> Bool {
-        let root = OpenClawConfigFile.loadDict()
-        if let wizard = root["wizard"] as? [String: Any], !wizard.isEmpty {
-            return true
-        }
-        if let gateway = root["gateway"] as? [String: Any],
-           let auth = gateway["auth"] as? [String: Any]
-        {
-            if let mode = auth["mode"] as? String,
-               !mode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            {
-                return true
-            }
-            if let token = auth["token"] as? String,
-               !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            {
-                return true
-            }
-            if let password = auth["password"] as? String,
-               !password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            {
-                return true
-            }
-        }
-        return false
+        !MinimalGatewayConfig.shouldRunInteractiveWizard()
     }
 }
 

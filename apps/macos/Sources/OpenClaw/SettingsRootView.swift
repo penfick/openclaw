@@ -125,7 +125,7 @@ struct SettingsRootView: View {
             }
             self.cachedDetailViews
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
         .padding(.horizontal, SettingsLayout.detailHorizontalPadding)
         .padding(.vertical, SettingsLayout.detailVerticalPadding)
     }
@@ -166,17 +166,21 @@ struct SettingsRootView: View {
     }
 
     private var cachedDetailViews: some View {
+        // Keep inactive tabs in a ZStack so state survives tab switches, but force
+        // every child to the proposed size (not content ideal height). Otherwise a
+        // tall Form/ScrollView tab expands the ZStack and clips Chat/天音 input bars.
         ZStack(alignment: .topLeading) {
             ForEach(self.cachedDetailTabs) { tab in
                 self.detailView(for: tab)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
                     .opacity(tab == self.selectedTab ? 1 : 0)
                     .allowsHitTesting(tab == self.selectedTab)
                     .disabled(tab != self.selectedTab)
                     .accessibilityHidden(tab != self.selectedTab)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
+        .clipped()
     }
 
     private func detailView(for tab: SettingsTab) -> AnyView {
@@ -190,7 +194,8 @@ struct SettingsRootView: View {
     private func detailContent(for tab: SettingsTab) -> AnyView {
         switch tab {
         case .chat:
-            AnyView(ChatSettingsView())
+            // Defensive: chat tab removed from sidebar; open main chat if somehow selected.
+            AnyView(Color.clear.onAppear { AppNavigationActions.openChat() })
         case .general:
             AnyView(GeneralSettings(state: self.state, page: .general, isActive: self.selectedTab == tab))
         case .connection:
@@ -225,7 +230,8 @@ struct SettingsRootView: View {
         case .account:
             AnyView(AccountSettings())
         case .tianyinAssistant:
-            AnyView(TianyinAssistantView())
+            // Defensive: 天音对话已迁到主窗口；若误选则跳主窗天音。
+            AnyView(Color.clear.onAppear { AppNavigationActions.openChat() })
         case .tianyinSettings:
             AnyView(TianyinSettingsView())
         case .about:
@@ -250,6 +256,7 @@ struct SettingsRootView: View {
     }
 
     private func validTab(for requested: SettingsTab) -> SettingsTab {
+        if requested == .chat { return .general }
         if requested == .debug, !self.state.debugPaneEnabled { return .general }
         return requested
     }
@@ -317,11 +324,9 @@ private struct SettingsTabGroup: Identifiable {
 
     static func defaultGroups(showDebug: Bool) -> [SettingsTabGroup] {
         var groups = [
+            // Chat + 天音助手 live in the primary TClaw window. Settings only keeps 天音配置.
             SettingsTabGroup(id: "basics", title: "Basics", parts: [
-                .run([.chat]),
-                .titledRun(id: "tianyin", title: "天音", systemImage: "bubble.left.and.bubble.right",
-                           tabs: [.tianyinAssistant, .tianyinSettings]),
-                .run([.general, .connection, .permissions, .voiceWake]),
+                .run([.tianyinSettings, .general, .connection, .permissions, .voiceWake]),
             ]),
             SettingsTabGroup(id: "automation", title: "Automation", parts: [
                 .run([.channels, .skills, .cron, .execApprovals, .models]),

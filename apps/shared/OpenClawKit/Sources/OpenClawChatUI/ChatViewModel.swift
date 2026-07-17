@@ -199,12 +199,79 @@ public final class OpenClawChatViewModel {
         self.applySessionSwitch(to: sessionKey, intent: .externalSync)
     }
 
+    /// Create a new isolated session (gateway `sessions.create`) and switch to it.
+    public func startNewSession(label: String? = nil) {
+        Task { await self.performStartNewSession(preferredLabel: label) }
+    }
+
+    /// Rename a session via `sessions.patch` `{ label }`.
+    public func renameSession(_ sessionKey: String, label: String) {
+        Task { await self.performRenameSession(sessionKey: sessionKey, label: label) }
+    }
+
+    /// Delete a non-main session via `sessions.delete`. Switches away if deleting the active one.
+    public func deleteSession(_ sessionKey: String) {
+        Task { await self.performDeleteSession(sessionKey: sessionKey) }
+    }
+
     public func selectThinkingLevel(_ level: String) {
         Task { await self.performSelectThinkingLevel(level) }
     }
 
     public func selectModel(_ selectionID: String) {
         Task { await self.performSelectModel(selectionID) }
+    }
+
+    /// Full session list for a sidebar (not limited to the 24h composer picker).
+    /// Main is pinned first; remaining sorted by `updatedAt` desc. Hides onboarding/internal keys.
+    public var sidebarSessions: [OpenClawChatSessionEntry] {
+        let mainKey = self.resolvedMainSessionKey
+        let sorted = self.sessions.sorted { ($0.updatedAt ?? 0) > ($1.updatedAt ?? 0) }
+        var result: [OpenClawChatSessionEntry] = []
+        var included = Set<String>()
+
+        if let main = sorted.first(where: { Self.sessionKeysMatch($0.key, mainKey) }) {
+            result.append(main)
+            included.insert(main.key)
+        } else {
+            result.append(self.placeholderSession(key: mainKey))
+            included.insert(mainKey)
+        }
+
+        for entry in sorted {
+            guard !included.contains(entry.key) else { continue }
+            guard !Self.isHiddenInternalSession(entry.key) else { continue }
+            // Avoid duplicating main under alias forms (main vs agent:main:main).
+            if Self.sessionKeysMatch(entry.key, mainKey) { continue }
+            result.append(entry)
+            included.insert(entry.key)
+        }
+
+        if !included.contains(where: { Self.sessionKeysMatch($0, self.sessionKey) }),
+           !Self.isHiddenInternalSession(self.sessionKey)
+        {
+            if let current = sorted.first(where: { Self.sessionKeysMatch($0.key, self.sessionKey) }) {
+                result.append(current)
+            } else {
+                result.append(self.placeholderSession(key: self.sessionKey))
+            }
+        }
+
+        return result
+    }
+
+    public func isMainSessionKey(_ key: String) -> Bool {
+        Self.sessionKeysMatch(key, self.resolvedMainSessionKey) || key == "main" || key == "agent:main:main"
+    }
+
+    private static func sessionKeysMatch(_ a: String, _ b: String) -> Bool {
+        let left = a.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let right = b.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if left == right { return true }
+        if (left == "main" && right == "agent:main:main") || (left == "agent:main:main" && right == "main") {
+            return true
+        }
+        return false
     }
 
     public var sessionChoices: [OpenClawChatSessionEntry] {
@@ -760,7 +827,7 @@ public final class OpenClawChatViewModel {
         let command = trimmed.lowercased()
         if command == "/new" {
             self.input = ""
-            await self.performStartNewSession()
+            await self.performStartNewSession(preferredLabel: nil)
             return
         }
         if Self.resetTriggers.contains(command) {
@@ -962,14 +1029,15 @@ public final class OpenClawChatViewModel {
         self.startBootstrap(sessionKey: next)
     }
 
-    private func performStartNewSession() async {
+    private func performStartNewSession(preferredLabel: String? = nil) async {
         let requested = self.generatedNewSessionKey()
         let parentSessionKey = self.sessionKey
+        let label = preferredLabel?.trimmingCharacters(in: .whitespacesAndNewlines)
         let next: String
         do {
             let created = try await transport.createSession(
                 key: requested,
-                label: nil,
+                label: (label?.isEmpty == false) ? label : "New Chat",
                 parentSessionKey: parentSessionKey)
             let createdKey = created.key.trimmingCharacters(in: .whitespacesAndNewlines)
             next = createdKey.isEmpty ? requested : createdKey
@@ -994,7 +1062,72 @@ public final class OpenClawChatViewModel {
         self.streamingAssistantText = nil
         self.clearPendingRuns(reason: nil)
         self.errorText = nil
+        // Refresh list so the new session appears in the sidebar immediately.
         self.startBootstrap()
+        self.refreshSessions(limit: 200)
+    }
+
+    private func performRenameSession(sessionKey: String, label: String) async {
+        let trimmedKey = sessionKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedLabel = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedKey.isEmpty else { return }
+        do {
+            try await self.transport.setSessionLabel(
+                sessionKey: trimmedKey,
+                label: trimmedLabel.isEmpty ? nil : trimmedLabel)
+            // Optimistic local update for snappy UI.
+            if let idx = self.sessions.firstIndex(where: { $0.key == trimmedKey }) {
+                let old = self.sessions[idx]
+                self.sessions[idx] = OpenClawChatSessionEntry(
+                    key: old.key,
+                    kind: old.kind,
+                    displayName: trimmedLabel.isEmpty ? nil : trimmedLabel,
+                    surface: old.surface,
+                    subject: old.subject,
+                    room: old.room,
+                    space: old.space,
+                    updatedAt: old.updatedAt,
+                    sessionId: old.sessionId,
+                    systemSent: old.systemSent,
+                    abortedLastRun: old.abortedLastRun,
+                    thinkingLevel: old.thinkingLevel,
+                    verboseLevel: old.verboseLevel,
+                    inputTokens: old.inputTokens,
+                    outputTokens: old.outputTokens,
+                    totalTokens: old.totalTokens,
+                    modelProvider: old.modelProvider,
+                    model: old.model,
+                    contextTokens: old.contextTokens,
+                    thinkingLevels: old.thinkingLevels,
+                    thinkingOptions: old.thinkingOptions,
+                    thinkingDefault: old.thinkingDefault)
+            }
+            self.refreshSessions(limit: 200)
+        } catch {
+            chatUILogger.error("sessions.patch(label) failed \(error.localizedDescription, privacy: .public)")
+            self.errorText = error.localizedDescription
+        }
+    }
+
+    private func performDeleteSession(sessionKey: String) async {
+        let trimmedKey = sessionKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedKey.isEmpty else { return }
+        if self.isMainSessionKey(trimmedKey) {
+            self.errorText = "Cannot delete the main session."
+            return
+        }
+        let deletingActive = Self.sessionKeysMatch(trimmedKey, self.sessionKey)
+        do {
+            try await self.transport.deleteSession(sessionKey: trimmedKey, deleteTranscript: true)
+            self.sessions.removeAll { Self.sessionKeysMatch($0.key, trimmedKey) }
+            if deletingActive {
+                self.applySessionSwitch(to: self.resolvedMainSessionKey, intent: .userInitiated)
+            }
+            self.refreshSessions(limit: 200)
+        } catch {
+            chatUILogger.error("sessions.delete failed \(error.localizedDescription, privacy: .public)")
+            self.errorText = error.localizedDescription
+        }
     }
 
     private static func isUnsupportedCreateSessionError(_ error: Error) -> Bool {
@@ -1327,7 +1460,8 @@ public final class OpenClawChatViewModel {
     }
 
     private func generatedNewSessionKey() -> String {
-        let baseKey = "ios-\(UUID().uuidString.lowercased())"
+        // Prefer agent-scoped webchat keys so sessions.list surfaces them next to main.
+        let baseKey = "webchat-\(UUID().uuidString.lowercased())"
         guard let agentID = Self.agentID(fromSessionKey: sessionKey) ??
             Self.agentID(fromSessionKey: resolvedMainSessionKey) ??
             sessions.lazy.compactMap({ Self.agentID(fromSessionKey: $0.key) }).first

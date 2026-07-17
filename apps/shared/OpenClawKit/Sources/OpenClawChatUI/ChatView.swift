@@ -118,15 +118,17 @@ public struct OpenClawChatView: View {
     @ViewBuilder
     private var content: some View {
         #if os(macOS)
-        VStack(spacing: Layout.stackSpacing) {
-            self.messageList
-                .padding(.horizontal, Layout.outerPaddingHorizontal)
-            self.composer
-                .padding(.horizontal, Layout.composerPaddingHorizontal)
-        }
-        .padding(.vertical, Layout.outerPaddingVertical)
-        .frame(maxWidth: .infinity)
-        .frame(maxHeight: .infinity, alignment: .top)
+        // Pin the composer with safeAreaInset so a greedy ScrollView / layoutPriority
+        // message list can never squeeze the input bar off-screen inside Settings.
+        self.messageList
+            .padding(.horizontal, Layout.outerPaddingHorizontal)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .safeAreaInset(edge: .bottom, spacing: Layout.stackSpacing) {
+                self.composer
+                    .padding(.horizontal, Layout.composerPaddingHorizontal)
+            }
+            .padding(.vertical, Layout.outerPaddingVertical)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         #else
         VStack(spacing: 0) {
             self.messageList
@@ -197,9 +199,10 @@ public struct OpenClawChatView: View {
 
             self.messageListOverlay
         }
-        // Ensure the message list claims vertical space on the first layout pass.
+        // Claim remaining vertical space, but never outrank the composer (see macOS
+        // safeAreaInset in content). layoutPriority(1) here used to win compression
+        // fights and squash the input bar to zero height inside Settings.
         .frame(maxHeight: .infinity, alignment: .top)
-        .layoutPriority(1)
         .simultaneousGesture(
             TapGesture().onEnded {
                 self.dismissKeyboardIfNeeded()

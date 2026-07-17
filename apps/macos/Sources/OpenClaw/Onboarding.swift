@@ -6,7 +6,7 @@ import OpenClawIPC
 import SwiftUI
 
 enum UIStrings {
-    static let welcomeTitle = "Welcome to OpenClaw"
+    static var welcomeTitle: String { String(localized: "Welcome to TClaw") }
 }
 
 enum RemoteOnboardingProbeState: Equatable {

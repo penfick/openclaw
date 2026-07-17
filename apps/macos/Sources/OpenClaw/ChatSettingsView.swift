@@ -4,34 +4,110 @@ import SwiftUI
 
 // Chat embedded as a Settings tab. Same view the standalone WebChat window uses
 // (OpenClawChatView on the main gateway session) — so this tab and the independent chat window
-// render the same main-session conversation. The standalone window (WebChatManager) stays
-// available from the menu bar / dock; this just also exposes chat inside Settings.
+// can share main-session conversation when both are on main; other sessions are isolated.
+//
+// Full multi-conversation UI: secondary session rail (new / list / search / rename / delete)
+// + chat transcript. Gateway sessions.create / list / patch / delete are the backend.
 //
 // At launch the gateway (and its WS) may still be coming up, and OpenClawChatView shows a sticky
 // "gateway connect" error if its first health probe misses. So we wait for the gateway to be
 // HEALTHY (same probe the chat view uses: healthOK) and stable before constructing the chat view
-// model — showing a "正在连接 OpenClaw 网关…" loading state meanwhile. Only error after genuinely
-// failing to reach the gateway.
+// model — showing a "正在连接 OpenClaw 网关…" loading state meanwhile.
 
 struct ChatSettingsView: View {
     @State private var viewModel: OpenClawChatViewModel?
     @State private var connectError: String?
+    @AppStorage("openclaw.chat.sessionRailCollapsed") private var sessionRailCollapsed = false
 
     var body: some View {
         Group {
             if let viewModel {
-                OpenClawChatView(viewModel: viewModel, style: .standard)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                self.chatChrome(viewModel)
             } else if let connectError {
                 self.errorView(connectError)
             } else {
                 self.loadingView
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .clipped()
         .task {
             await self.connect()
         }
+    }
+
+    @ViewBuilder
+    private func chatChrome(_ viewModel: OpenClawChatViewModel) -> some View {
+        HStack(spacing: 0) {
+            if !self.sessionRailCollapsed {
+                ChatSessionSidebar(
+                    viewModel: viewModel,
+                    collapsed: self.$sessionRailCollapsed)
+                Divider()
+            }
+
+            VStack(spacing: 0) {
+                if self.sessionRailCollapsed {
+                    self.collapsedRailBar(viewModel)
+                    Divider()
+                }
+                OpenClawChatView(viewModel: viewModel, style: .standard)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    /// Thin bar shown when the session rail is collapsed — expand + new + current title.
+    private func collapsedRailBar(_ viewModel: OpenClawChatViewModel) -> some View {
+        HStack(spacing: 10) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    self.sessionRailCollapsed = false
+                }
+            } label: {
+                Label("Conversations", systemImage: "sidebar.left")
+                    .labelStyle(.iconOnly)
+            }
+            .buttonStyle(.borderless)
+            .help("Show conversation list")
+
+            Button {
+                viewModel.startNewSession(label: "New Chat")
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    self.sessionRailCollapsed = false
+                }
+            } label: {
+                Image(systemName: "square.and.pencil")
+            }
+            .buttonStyle(.borderless)
+            .help("New conversation (⌘N)")
+            .keyboardShortcut("n", modifiers: .command)
+
+            Text(self.currentSessionTitle(viewModel))
+                .font(.callout.weight(.medium))
+                .lineLimit(1)
+                .foregroundStyle(.secondary)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.4))
+    }
+
+    private func currentSessionTitle(_ viewModel: OpenClawChatViewModel) -> String {
+        if viewModel.isMainSessionKey(viewModel.sessionKey) {
+            return "Main conversation"
+        }
+        if let match = viewModel.sidebarSessions.first(where: { $0.key == viewModel.sessionKey }),
+           let name = match.displayName?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !name.isEmpty
+        {
+            return name
+        }
+        return viewModel.sessionKey
     }
 
     private func connect() async {
@@ -45,7 +121,9 @@ struct ChatSettingsView: View {
         }
         let key = await GatewayConnection.shared.mainSessionKey()
         guard !Task.isCancelled else { return }
-        self.viewModel = OpenClawChatViewModel(sessionKey: key, transport: MacGatewayChatTransport())
+        self.viewModel = OpenClawChatViewModel(
+            sessionKey: key,
+            transport: MacGatewayChatTransport())
     }
 
     private var loadingView: some View {

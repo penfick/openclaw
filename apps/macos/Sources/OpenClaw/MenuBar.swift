@@ -32,6 +32,8 @@ struct OpenClawApp: App {
     }
 
     init() {
+        // Language override must run before any Text()/LocalizedStringKey resolves.
+        LanguageOverride.applyIfNeeded()
         OpenClawLogging.bootstrapIfNeeded()
         GatewayConnectivityCoordinator.shared.start()
 
@@ -52,7 +54,7 @@ struct OpenClawApp: App {
                 animationsEnabled: self.state.iconAnimationsEnabled && !self.isGatewaySleeping,
                 iconState: self.effectiveIconState,
                 voiceWakeMeterActive: self.state.voiceWakeMeterActive)
-                .background(SettingsWindowOpenRegistrar())
+                .background(WindowOpenRegistrar())
         }
         .menuBarExtraAccess(isPresented: self.$isMenuPresented) { item in
             // SwiftUI can vend a replacement status item during connection churn.
@@ -91,22 +93,36 @@ struct OpenClawApp: App {
             CLIInstallPrompter.shared.checkAndPromptIfNeeded(reason: "connection-mode")
         }
 
-        Window("OpenClaw Settings", id: SettingsWindowOpener.windowID) {
+        // Primary product window: multi-session chat (sessions rail + transcript).
+        Window("TClaw", id: ChatWindowOpener.windowID) {
+            ChatMainView()
+        }
+        .defaultSize(width: 1100, height: 740)
+        .windowResizability(.contentSize)
+        .commands {
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings…") {
+                    self.openWindow(id: SettingsWindowOpener.windowID)
+                }
+                .keyboardShortcut(",", modifiers: .command)
+            }
+            CommandGroup(after: .windowList) {
+                Button("Open Chat") {
+                    self.openWindow(id: ChatWindowOpener.windowID)
+                }
+                .keyboardShortcut("1", modifiers: [.command])
+            }
+            SidebarCommands()
+        }
+
+        // Preferences / enterprise config — separate from the chat main window.
+        Window("TClaw Settings", id: SettingsWindowOpener.windowID) {
             SettingsRootView(state: self.state, updater: self.delegate.updaterController)
                 .frame(width: SettingsTab.windowWidth, height: SettingsTab.windowHeight, alignment: .topLeading)
                 .environment(self.tailscaleService)
         }
         .defaultSize(width: SettingsTab.windowWidth, height: SettingsTab.windowHeight)
         .windowResizability(.contentSize)
-        .commands {
-            CommandGroup(replacing: .appSettings) {
-                Button("Settings...") {
-                    self.openWindow(id: SettingsWindowOpener.windowID)
-                }
-                .keyboardShortcut(",", modifiers: .command)
-            }
-            SidebarCommands()
-        }
         .onChange(of: self.isMenuPresented) { _, _ in
             self.updateStatusHighlight()
             self.updateHoverHUDSuppression()
@@ -119,8 +135,8 @@ struct OpenClawApp: App {
         // leak into menu item validation and grey out app-level commands like Settings.
         self.statusItem?.button?.appearsDisabled = false
         self.statusItem?.button?.toolTip = self.state.voiceWakeMeterActive
-            ? "OpenClaw - Voice Wake live meter active"
-            : "OpenClaw"
+            ? "TClaw - Voice Wake live meter active"
+            : "TClaw"
     }
 
     private static func applyAttachOnlyOverrideIfNeeded() {
@@ -257,7 +273,7 @@ private final class StatusItemMouseHandlerView: NSView {
     }
 }
 
-private struct SettingsWindowOpenRegistrar: View {
+private struct WindowOpenRegistrar: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -267,6 +283,9 @@ private struct SettingsWindowOpenRegistrar: View {
                 let openWindow = self.openWindow
                 SettingsWindowOpener.shared.register {
                     openWindow(id: SettingsWindowOpener.windowID)
+                }
+                ChatWindowOpener.shared.register {
+                    openWindow(id: ChatWindowOpener.windowID)
                 }
             }
     }
@@ -370,26 +389,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { await OAAuthCoordinator.shared.restoreSession() }
         self.scheduleFirstRunOnboardingIfNeeded()
 
-        // 启动默认行为：onboarding 已完成时，自动打开设置窗口到「聊天」页。首跑会走 onboarding，
-        // 不冲突。复用 onboarding 的 asyncAfter(0.6)，等菜单栏标签渲染完、SettingsWindowOpener 注册好。
+        // 启动默认：onboarding 已完成时打开主聊天窗（不再进设置）。首跑走 onboarding。
         let seenVersion = UserDefaults.standard.integer(forKey: onboardingVersionKey)
         let onboardingWillShow = AppStateStore.shared.connectionMode == .unconfigured
             && (seenVersion < currentOnboardingVersion || !AppStateStore.shared.onboardingSeen)
         if !onboardingWillShow {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                AppNavigationActions.openSettings(tab: .chat)
+                AppNavigationActions.openChat()
             }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             CLIInstallPrompter.shared.checkAndPromptIfNeeded(reason: "launch")
         }
 
-        // Developer/testing helper: auto-open chat when launched with --chat (or legacy --webchat).
-        if CommandLine.arguments.contains("--chat") || CommandLine.arguments.contains("--webchat") {
-            self.webChatAutoLogger.debug("Auto-opening chat via CLI flag")
+        // Developer/testing helper: auto-open main chat window (or floating panel with --webchat).
+        if CommandLine.arguments.contains("--chat") {
+            self.webChatAutoLogger.debug("Auto-opening main chat via CLI flag")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                AppNavigationActions.openChat()
+            }
+        } else if CommandLine.arguments.contains("--webchat") {
+            self.webChatAutoLogger.debug("Auto-opening floating chat panel via --webchat")
             Task { @MainActor in
-                let sessionKey = await WebChatManager.shared.preferredSessionKey()
-                WebChatManager.shared.show(sessionKey: sessionKey)
+                AppNavigationActions.openChatPanel()
             }
         }
         if CommandLine.arguments.contains("--dashboard") {

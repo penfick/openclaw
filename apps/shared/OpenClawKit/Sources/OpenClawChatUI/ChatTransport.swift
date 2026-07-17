@@ -36,6 +36,12 @@ public protocol OpenClawChatTransport: Sendable {
     func setActiveSessionKey(_ sessionKey: String) async throws
     func resetSession(sessionKey: String) async throws
     func compactSession(sessionKey: String) async throws
+
+    /// Rename / set display label via `sessions.patch` `{ key, label }`.
+    func setSessionLabel(sessionKey: String, label: String?) async throws
+
+    /// Delete a non-main session via `sessions.delete`.
+    func deleteSession(sessionKey: String, deleteTranscript: Bool) async throws
 }
 
 extension OpenClawChatTransport {
@@ -103,5 +109,19 @@ extension OpenClawChatTransport {
             domain: "OpenClawChatTransport",
             code: 0,
             userInfo: [NSLocalizedDescriptionKey: "sessions.patch(thinkingLevel) not supported by this transport"])
+    }
+
+    public func setSessionLabel(sessionKey _: String, label _: String?) async throws {
+        throw NSError(
+            domain: "OpenClawChatTransport",
+            code: 0,
+            userInfo: [NSLocalizedDescriptionKey: "sessions.patch(label) not supported by this transport"])
+    }
+
+    public func deleteSession(sessionKey _: String, deleteTranscript _: Bool) async throws {
+        throw NSError(
+            domain: "OpenClawChatTransport",
+            code: 0,
+            userInfo: [NSLocalizedDescriptionKey: "sessions.delete not supported by this transport"])
     }
 }

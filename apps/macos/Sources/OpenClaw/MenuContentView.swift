@@ -137,10 +137,12 @@ struct MenuContent: View {
             .disabled(!voiceWakeSupported)
             .opacity(voiceWakeSupported ? 1 : 0.5)
             Divider()
+            Button("Open Chat") { AppNavigationActions.openChat() }
+                .keyboardShortcut("1", modifiers: [.command])
             Button("Settings…") { self.open(tab: .general) }
                 .keyboardShortcut(",", modifiers: [.command])
             self.debugMenu
-            Button("About OpenClaw") { self.open(tab: .about) }
+            Button("About TClaw") { self.open(tab: .about) }
             if let updater, updater.isAvailable, self.updateStatus.isUpdateReady {
                 Button("Update ready, restart now?") { updater.checkForUpdates(nil) }
             }
@@ -177,11 +179,11 @@ struct MenuContent: View {
     private var connectionLabel: String {
         switch self.state.connectionMode {
         case .unconfigured:
-            "OpenClaw Not Configured"
+            String(localized: "TClaw Not Configured")
         case .remote:
-            "Remote OpenClaw Active"
+            String(localized: "Remote TClaw Active")
         case .local:
-            "OpenClaw Active"
+            String(localized: "TClaw Active")
         }
     }
 

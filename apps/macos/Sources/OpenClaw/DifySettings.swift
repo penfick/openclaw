@@ -265,22 +265,34 @@ final class DifyChatModel {
 // MARK: - 天音助手 (conversation)
 
 struct TianyinAssistantView: View {
-    @State private var chat = DifyChatModel()
+    /// Shared model so the main-window rail can clear/start a new 天音 conversation.
+    @Bindable var chat: DifyChatModel
+    /// When true (main window), omit Settings-style page header — chrome is the window top bar.
+    var embedded: Bool = false
+
+    init(chat: DifyChatModel, embedded: Bool = false) {
+        self.chat = chat
+        self.embedded = embedded
+    }
 
     var body: some View {
-        // Chat-app layout: header on top, transcript fills the middle, input pinned at the bottom.
-        // Root MUST claim full height (not settingsDetailContent, which doesn't set maxHeight) —
-        // otherwise the greedy transcript ScrollView squeezes the input bar off-screen.
-        VStack(alignment: .leading, spacing: 14) {
-            SettingsPageHeader(
-                title: "天音助手",
-                subtitle: "与天音知识库对话（独立于网关 / OA）。")
+        // Transcript fills height; input pinned via safeAreaInset so ScrollView can't
+        // push the bar off-screen.
+        VStack(alignment: .leading, spacing: self.embedded ? 0 : 14) {
+            if !self.embedded {
+                SettingsPageHeader(
+                    title: "天音助手",
+                    subtitle: "与天音知识库对话（独立于网关 / OA）。")
+            }
 
             self.messagesArea
-
-            self.inputBar
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .safeAreaInset(edge: .bottom, spacing: self.embedded ? 8 : 10) {
+            self.inputBar
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, self.embedded ? 10 : 0)
+        }
     }
 
     /// Conversation transcript — fills the available height and scrolls independently.
@@ -316,7 +328,7 @@ struct TianyinAssistantView: View {
         }
     }
 
-    /// Input bar pinned at the bottom of the page (mirrors the Chat menu).
+    /// Input bar pinned via safeAreaInset (mirrors OpenClawChatView on macOS).
     private var inputBar: some View {
         VStack(alignment: .leading, spacing: 6) {
             if let error = self.chat.error {
@@ -347,6 +359,11 @@ struct TianyinAssistantView: View {
                 .disabled(self.chat.messages.isEmpty)
             }
         }
+        // Keep intrinsic height; never compress under a greedy transcript.
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.top, 4)
+        .padding(.bottom, 2)
+        .background(.background)
     }
 }
 
